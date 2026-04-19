@@ -1110,6 +1110,31 @@ class RegistrySyncEvent(DataBaseModel):
         db_table = "registry_sync_event"
 
 
+class PlatformAuthUserBinding(DataBaseModel):
+    id = CharField(max_length=32, primary_key=True)
+    platform_user_id = CharField(max_length=64, null=False, index=True)
+    platform_workspace_id = CharField(max_length=64, null=False, index=True)
+    system_code = CharField(max_length=32, null=False, default="ragflow", index=True)
+    local_user_id = CharField(max_length=32, null=False, index=True)
+    local_username = CharField(max_length=255, null=True, default="")
+    status = CharField(max_length=32, null=False, default="active", index=True)
+
+    class Meta:
+        db_table = "platform_auth_user_binding"
+
+
+class PlatformAuthWorkspaceBinding(DataBaseModel):
+    id = CharField(max_length=32, primary_key=True)
+    platform_workspace_id = CharField(max_length=64, null=False, index=True)
+    system_code = CharField(max_length=32, null=False, default="ragflow", index=True)
+    local_tenant_id = CharField(max_length=32, null=False, index=True)
+    local_tenant_name = CharField(max_length=255, null=True, default="")
+    status = CharField(max_length=32, null=False, default="active", index=True)
+
+    class Meta:
+        db_table = "platform_auth_workspace_binding"
+
+
 class MCPServer(DataBaseModel):
     id = CharField(max_length=32, primary_key=True)
     name = CharField(max_length=255, null=False, help_text="MCP Server name")
@@ -1688,6 +1713,17 @@ def migrate_db():
     alter_db_add_column(migrator, "registry_sync_event", "status", CharField(max_length=32, null=False, default="success", index=True))
     alter_db_add_column(migrator, "registry_sync_event", "message", TextField(null=True, default=""))
     alter_db_add_column(migrator, "registry_sync_event", "payload", JSONField(null=True, default={}))
+    alter_db_add_column(migrator, "platform_auth_user_binding", "platform_user_id", CharField(max_length=64, null=False, default="", index=True))
+    alter_db_add_column(migrator, "platform_auth_user_binding", "platform_workspace_id", CharField(max_length=64, null=False, default="", index=True))
+    alter_db_add_column(migrator, "platform_auth_user_binding", "system_code", CharField(max_length=32, null=False, default="ragflow", index=True))
+    alter_db_add_column(migrator, "platform_auth_user_binding", "local_user_id", CharField(max_length=32, null=False, default="", index=True))
+    alter_db_add_column(migrator, "platform_auth_user_binding", "local_username", CharField(max_length=255, null=True, default=""))
+    alter_db_add_column(migrator, "platform_auth_user_binding", "status", CharField(max_length=32, null=False, default="active", index=True))
+    alter_db_add_column(migrator, "platform_auth_workspace_binding", "platform_workspace_id", CharField(max_length=64, null=False, default="", index=True))
+    alter_db_add_column(migrator, "platform_auth_workspace_binding", "system_code", CharField(max_length=32, null=False, default="ragflow", index=True))
+    alter_db_add_column(migrator, "platform_auth_workspace_binding", "local_tenant_id", CharField(max_length=32, null=False, default="", index=True))
+    alter_db_add_column(migrator, "platform_auth_workspace_binding", "local_tenant_name", CharField(max_length=255, null=True, default=""))
+    alter_db_add_column(migrator, "platform_auth_workspace_binding", "status", CharField(max_length=32, null=False, default="active", index=True))
     logging.disable(logging.NOTSET)
     # this is after re-enabling logging to allow logging changed user emails
     migrate_add_unique_email(migrator)

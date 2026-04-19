@@ -61,6 +61,7 @@ from api.utils.web_utils import (
 )
 from common import settings
 from common.http_client import async_request
+from api.apps.services.platform_auth_service import exchange_platform_ticket, platform_auth_enabled
 
 
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
@@ -138,6 +139,40 @@ async def login():
             code=RetCode.AUTHENTICATION_ERROR,
             message="Email and password do not match!",
         )
+
+
+@manager.route("/sso/exchange", methods=["GET"])  # noqa: F821
+async def platform_sso_exchange():
+    if not platform_auth_enabled():
+        return get_json_result(
+            data=False,
+            code=RetCode.OPERATING_ERROR,
+            message="统一认证中心接入未启用",
+        )
+
+    ticket = (request.args.get("ticket") or "").strip()
+    if not ticket:
+        return get_json_result(
+            data=False,
+            code=RetCode.ARGUMENT_ERROR,
+            message="ticket is required",
+        )
+
+    try:
+        user = exchange_platform_ticket(ticket)
+    except Exception as exc:
+        logging.exception(exc)
+        return get_json_result(
+            data=False,
+            code=RetCode.AUTHENTICATION_ERROR,
+            message=f"SSO exchange failed: {str(exc)}",
+        )
+
+    user.access_token = get_uuid()
+    user.last_login_time = get_format_time()
+    login_user(user)
+    user.save()
+    return redirect(f"/?auth={user.get_id()}")
 
 
 @manager.route("/login/channels", methods=["GET"])  # noqa: F821
