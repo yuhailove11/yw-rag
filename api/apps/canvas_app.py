@@ -49,6 +49,7 @@ from rag.utils.redis_conn import REDIS_CONN
 from common import settings
 from api.apps import login_required, current_user
 from api.apps.services.canvas_replica_service import CanvasReplicaService
+from api.apps.services.platform_governance_service import ensure_agent_operation_allowed
 from api.db.services.canvas_service import completion as agent_completion
 
 
@@ -83,6 +84,9 @@ async def save():
     except ValueError as e:
         return get_data_error_result(message=str(e))
     cate = req.get("canvas_category", CanvasCategory.Agent)
+    allowed, message = ensure_agent_operation_allowed(cate)
+    if not allowed:
+        return get_data_error_result(message=message)
     if "id" not in req:
         req["user_id"] = current_user.id
         if UserCanvasService.query(user_id=current_user.id, title=req["title"].strip(), canvas_category=cate):
@@ -215,6 +219,9 @@ async def run():
     replica_dsl = replica_payload.get("dsl", {})
     canvas_title = replica_payload.get("title", "")
     canvas_category = replica_payload.get("canvas_category", CanvasCategory.Agent)
+    allowed, message = ensure_agent_operation_allowed(canvas_category)
+    if not allowed:
+        return get_data_error_result(message=message)
     dsl_str = json.dumps(replica_dsl, ensure_ascii=False)
 
     _, cvs = await thread_pool_exec(UserCanvasService.get_by_id, req["id"])
@@ -271,6 +278,9 @@ async def run():
 @login_required
 async def exp_agent_completion(canvas_id):
     tenant_id = current_user.id
+    allowed, message = ensure_agent_operation_allowed(CanvasCategory.Agent)
+    if not allowed:
+        return get_data_error_result(message=message)
     req = await get_request_json()
     return_trace = bool(req.get("return_trace", False))
     async def generate():
@@ -618,6 +628,9 @@ async def setting():
     e,flow = UserCanvasService.get_by_id(req["id"])
     if not e:
         return get_data_error_result(message="canvas not found.")
+    allowed, message = ensure_agent_operation_allowed(getattr(flow, "canvas_category", None))
+    if not allowed:
+        return get_data_error_result(message=message)
     flow = flow.to_dict()
     flow["title"] = req["title"]
 
@@ -684,6 +697,9 @@ def sessions(canvas_id):
 async def set_session(canvas_id):
     req = await get_request_json()
     tenant_id = current_user.id
+    allowed, message = ensure_agent_operation_allowed(CanvasCategory.Agent)
+    if not allowed:
+        return get_data_error_result(message=message)
     e, cvs = UserCanvasService.get_by_id(canvas_id)
     assert e, "Agent not found."
     if not isinstance(cvs.dsl, str):

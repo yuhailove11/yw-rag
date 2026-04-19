@@ -54,7 +54,7 @@ The [.env](./.env) file contains important environment variables for Docker.
 - `MYSQL_PORT`  
   The port to connect to MySQL from RAGFlow container. Defaults to `3306`. Change this if you use an external MySQL.
 - `EXPOSE_MYSQL_PORT`  
-  The port used to expose the MySQL service to the host machine, allowing **external** access to the MySQL database running inside the Docker container. Defaults to `5455`.
+  The port used to expose the MySQL service to the host machine, allowing **external** access to the MySQL database running inside the Docker container. Defaults to `13306`.
 
 ### MinIO
 
@@ -80,6 +80,8 @@ The [.env](./.env) file contains important environment variables for Docker.
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW-IMAGE`  
   The Docker image edition. Defaults to `infiniflow/ragflow:v0.24.0`. The RAGFlow Docker image does not include embedding models.
+- `EXPOSE_MYSQL_PORT`
+  The host port used to expose the built-in MySQL service. In this repository it is adjusted to `13306` to avoid conflicts with a locally installed MySQL or Windows reserved ports.
 
   
 > [!TIP]  
@@ -122,6 +124,22 @@ The [.env](./.env) file contains important environment variables for Docker.
 ## 🐋 Service configuration
 
 [service_conf.yaml](./service_conf.yaml) specifies the system-level configuration for RAGFlow and is used by its API server and task executor. In a dockerized setup, this file is automatically created based on the [service_conf.yaml.template](./service_conf.yaml.template) file (replacing all environment variables by their values).
+
+For the governance integration in this repository, `docker-compose.yml` mounts both the local `../api` and `../common` directories into the container. If you only mount `../api` but forget `../common`, the main `ragflow_server.py` process will fail to start because modules such as `common.tag_feature_utils` cannot be imported. The visible symptom is:
+
+1. `ragflow-cpu` or `ragflow-gpu` container is `Up`
+2. admin and data sync workers are running
+3. login and register pages are unavailable
+4. logs contain `ModuleNotFoundError: No module named 'common.tag_feature_utils'`
+
+If that happens, recreate the RAGFlow container after fixing the mount:
+
+```bash
+cd docker
+docker compose up -d --force-recreate ragflow-cpu
+```
+
+If you run the GPU profile, replace `ragflow-cpu` with `ragflow-gpu`.
 
 - `ragflow`
   - `host`: The API server's IP address inside the Docker container. Defaults to `0.0.0.0`.

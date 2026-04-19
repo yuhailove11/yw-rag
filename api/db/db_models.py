@@ -1084,6 +1084,32 @@ class UserCanvasVersion(DataBaseModel):
         db_table = "user_canvas_version"
 
 
+class RegistryBinding(DataBaseModel):
+    id = CharField(max_length=32, primary_key=True)
+    source_system = CharField(max_length=32, null=False, index=True)
+    source_id = CharField(max_length=64, null=False, index=True)
+    resource_code = CharField(max_length=255, null=False, index=True)
+    tenant_id = CharField(max_length=32, null=False, index=True)
+    sync_status = CharField(max_length=32, null=False, default="synced", index=True)
+    payload = JSONField(null=True, default={})
+
+    class Meta:
+        db_table = "registry_binding"
+
+
+class RegistrySyncEvent(DataBaseModel):
+    id = CharField(max_length=32, primary_key=True)
+    source_system = CharField(max_length=32, null=False, index=True)
+    source_id = CharField(max_length=64, null=False, index=True)
+    event_type = CharField(max_length=32, null=False, index=True)
+    status = CharField(max_length=32, null=False, default="success", index=True)
+    message = TextField(null=True, default="")
+    payload = JSONField(null=True, default={})
+
+    class Meta:
+        db_table = "registry_sync_event"
+
+
 class MCPServer(DataBaseModel):
     id = CharField(max_length=32, primary_key=True)
     name = CharField(max_length=255, null=False, help_text="MCP Server name")
@@ -1650,6 +1676,18 @@ def migrate_db():
     alter_db_add_column(migrator, "api_4_conversation", "version_title", CharField(max_length=255, null=True, help_text="canvas version title when session created", index=False))
     alter_db_column_type(migrator, "document", "size", BigIntegerField(default=0, index=True))
     alter_db_column_type(migrator, "file", "size", BigIntegerField(default=0, index=True))
+    alter_db_add_column(migrator, "registry_binding", "source_system", CharField(max_length=32, null=False, default="ragflow", index=True))
+    alter_db_add_column(migrator, "registry_binding", "source_id", CharField(max_length=64, null=False, default="", index=True))
+    alter_db_add_column(migrator, "registry_binding", "resource_code", CharField(max_length=255, null=False, default="", index=True))
+    alter_db_add_column(migrator, "registry_binding", "tenant_id", CharField(max_length=32, null=False, default="", index=True))
+    alter_db_add_column(migrator, "registry_binding", "sync_status", CharField(max_length=32, null=False, default="synced", index=True))
+    alter_db_add_column(migrator, "registry_binding", "payload", JSONField(null=True, default={}))
+    alter_db_add_column(migrator, "registry_sync_event", "source_system", CharField(max_length=32, null=False, default="ragflow", index=True))
+    alter_db_add_column(migrator, "registry_sync_event", "source_id", CharField(max_length=64, null=False, default="", index=True))
+    alter_db_add_column(migrator, "registry_sync_event", "event_type", CharField(max_length=32, null=False, default="upsert", index=True))
+    alter_db_add_column(migrator, "registry_sync_event", "status", CharField(max_length=32, null=False, default="success", index=True))
+    alter_db_add_column(migrator, "registry_sync_event", "message", TextField(null=True, default=""))
+    alter_db_add_column(migrator, "registry_sync_event", "payload", JSONField(null=True, default={}))
     logging.disable(logging.NOTSET)
     # this is after re-enabling logging to allow logging changed user emails
     migrate_add_unique_email(migrator)

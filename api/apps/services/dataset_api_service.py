@@ -26,6 +26,7 @@ from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
 from api.db.services.user_service import TenantService, UserService
+from api.apps.services.platform_governance_service import delete_knowledge_base, sync_knowledge_base
 from common.constants import FileSource, StatusEnum
 from api.utils.api_utils import deep_merge, get_parser_config, remap_dictionary_keys, verify_embedding_availability
 
@@ -87,6 +88,7 @@ async def create_dataset(tenant_id: str, req: dict):
     ok, k = KnowledgebaseService.get_by_id(create_dict["id"])
     if not ok:
         return False, "Dataset created failed"
+    sync_knowledge_base(k)
     response_data = remap_dictionary_keys(k.to_dict())
     return True, response_data
 
@@ -146,6 +148,7 @@ async def delete_datasets(tenant_id: str, ids: list = None, delete_all: bool = F
         if not KnowledgebaseService.delete_by_id(kb_id):
             errors.append(f"Delete dataset error for {kb_id}")
             continue
+        delete_knowledge_base(kb_id)
         success_count += 1
 
     if not errors:
@@ -268,6 +271,7 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
     ok, k = KnowledgebaseService.get_by_id(kb.id)
     if not ok:
         return False, "Dataset updated failed"
+    sync_knowledge_base(k)
 
     # Link connectors to the dataset
     errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], tenant_id)

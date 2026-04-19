@@ -28,6 +28,7 @@ import jwt
 
 from agent.canvas import Canvas
 from api.apps.services.canvas_replica_service import CanvasReplicaService
+from api.apps.services.platform_governance_service import ensure_agent_operation_allowed
 from api.db import CanvasCategory
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.file_service import FileService
@@ -71,6 +72,9 @@ def list_agents(tenant_id):
 @manager.route("/agents", methods=["POST"])  # noqa: F821
 @token_required
 async def create_agent(tenant_id: str):
+    allowed, message = ensure_agent_operation_allowed(CanvasCategory.Agent)
+    if not allowed:
+        return get_json_result(data=False, message=message, code=RetCode.OPERATING_ERROR)
     req: dict[str, Any] = cast(dict[str, Any], await get_request_json())
     req["user_id"] = tenant_id
 
@@ -109,6 +113,9 @@ async def create_agent(tenant_id: str):
 @manager.route("/agents/<agent_id>", methods=["PUT"])  # noqa: F821
 @token_required
 async def update_agent(tenant_id: str, agent_id: str):
+    allowed, message = ensure_agent_operation_allowed(CanvasCategory.Agent)
+    if not allowed:
+        return get_json_result(data=False, message=message, code=RetCode.OPERATING_ERROR)
     req: dict[str, Any] = {k: v for k, v in cast(dict[str, Any], (await get_request_json())).items() if v is not None}
     req["user_id"] = tenant_id
 
@@ -145,6 +152,9 @@ async def update_agent(tenant_id: str, agent_id: str):
 @manager.route("/agents/<agent_id>", methods=["DELETE"])  # noqa: F821
 @token_required
 def delete_agent(tenant_id: str, agent_id: str):
+    allowed, message = ensure_agent_operation_allowed(CanvasCategory.Agent)
+    if not allowed:
+        return get_json_result(data=False, message=message, code=RetCode.OPERATING_ERROR)
     if not UserCanvasService.query(user_id=tenant_id, id=agent_id):
         return get_json_result(
             data=False, message="Only owner of canvas authorized for this operation.",
@@ -167,6 +177,9 @@ async def webhook(agent_id: str):
     # 2. Check canvas category
     if cvs.canvas_category == CanvasCategory.DataFlow:
         return get_data_error_result(code=RetCode.BAD_REQUEST,message="Dataflow can not be triggered by webhook."),RetCode.BAD_REQUEST
+    allowed, message = ensure_agent_operation_allowed(cvs.canvas_category)
+    if not allowed:
+        return get_data_error_result(code=RetCode.BAD_REQUEST, message=message), RetCode.BAD_REQUEST
 
     # 3. Load DSL from canvas
     dsl = getattr(cvs, "dsl", None)
