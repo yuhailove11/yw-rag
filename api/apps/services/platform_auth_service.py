@@ -13,8 +13,12 @@ import json
 
 import requests
 
+from api.db import FileType, UserTenantRole
 from api.db.db_models import PlatformAuthUserBinding, PlatformAuthWorkspaceBinding
-from api.db.services.user_service import UserService
+from api.db.services.file_service import FileService
+from api.db.services.llm_service import get_init_tenant_llm
+from api.db.services.tenant_llm_service import TenantLLMService
+from api.db.services.user_service import TenantService, UserService, UserTenantService
 from common import settings
 from common.misc_utils import get_uuid
 from common.time_utils import get_format_time
@@ -69,6 +73,61 @@ def _consume_ticket(ticket: str) -> dict:
     )
     response.raise_for_status()
     return response.json()
+
+
+def _create_projection_user(local_user_id: str, local_email: str, nickname: str, is_superuser: bool):
+    """创建 RAGFlow 本地投影用户，并补齐租户、模型、根目录。"""
+    user_payload = {
+        "id": local_user_id,
+        "access_token": get_uuid(),
+        "email": local_email,
+        "avatar": "",
+        "nickname": nickname,
+        "login_channel": "platform_sso",
+        "last_login_time": get_format_time(),
+        "is_superuser": is_superuser,
+        "is_active": "1",
+        "status": "1",
+    }
+    tenant_payload = {
+        "id": local_user_id,
+        "name": f"{nickname}‘s Kingdom",
+        "llm_id": settings.CHAT_MDL,
+        "embd_id": settings.EMBEDDING_MDL,
+        "asr_id": settings.ASR_MDL,
+        "parser_ids": settings.PARSERS,
+        "img2txt_id": settings.IMAGE2TEXT_MDL,
+        "rerank_id": settings.RERANK_MDL,
+    }
+    user_tenant_payload = {
+        "tenant_id": local_user_id,
+        "user_id": local_user_id,
+        "invited_by": local_user_id,
+        "role": UserTenantRole.OWNER,
+    }
+    root_file_id = get_uuid()
+    root_file_payload = {
+        "id": root_file_id,
+        "parent_id": root_file_id,
+        "tenant_id": local_user_id,
+        "created_by": local_user_id,
+        "name": "/",
+        "type": FileType.FOLDER.value,
+        "size": 0,
+        "location": "",
+    }
+
+    if not UserService.save(**user_payload):
+        raise ValueError("统一认证中心创建本地用户失败")
+    TenantService.insert(**tenant_payload)
+    UserTenantService.insert(**user_tenant_payload)
+    TenantLLMService.insert_many(get_init_tenant_llm(local_user_id))
+    FileService.insert(root_file_payload)
+
+    users = UserService.query(email=local_email)
+    if not users:
+        raise ValueError("统一认证中心创建本地投影账号失败")
+    return users[0]
 
 
 def _upsert_platform_bindings(platform_user: dict, platform_workspace: dict, local_user_id: str, local_username: str) -> None:
@@ -163,23 +222,12 @@ def exchange_platform_ticket(ticket: str):
         user.save()
     else:
         nickname = str(platform_user.get("display_name") or platform_user.get("username") or local_user_id)
-        from api.apps.user_app import user_register
-
-        registered = user_register(
-            local_user_id,
-            {
-                "access_token": get_uuid(),
-                "email": local_email,
-                "avatar": "",
-                "nickname": nickname,
-                "login_channel": "platform_sso",
-                "last_login_time": get_format_time(),
-                "is_superuser": bool(payload.get("is_super_admin", False)),
-            },
+        user = _create_projection_user(
+            local_user_id=local_user_id,
+            local_email=local_email,
+            nickname=nickname,
+            is_superuser=bool(payload.get("is_super_admin", False)),
         )
-        if not registered:
-            raise ValueError("统一认证中心创建本地投影账号失败")
-        user = registered[0]
 
     _upsert_platform_bindings(
         platform_user,

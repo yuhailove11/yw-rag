@@ -48,7 +48,7 @@ def _headers() -> dict[str, str]:
 
 def _ragflow_public_base_url() -> str:
     cfg = _governance_config()
-    return str(cfg.get("ragflow_public_base_url") or "http://yw-rag:9380").rstrip("/")
+    return str(cfg.get("ragflow_public_base_url") or "http://127.0.0.1:8080").rstrip("/")
 
 
 def _ensure_retrieval_token(tenant_id: str) -> str:

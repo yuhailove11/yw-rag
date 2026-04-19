@@ -12,6 +12,7 @@ import authorizationUtil from './utils/authorization-util';
 export enum Routes {
   Root = '/',
   Login = '/login-next',
+  SsoCallback = '/auth/sso/callback',
   Logout = '/logout',
   Home = '/home',
   Datasets = '/datasets',
@@ -112,6 +113,11 @@ const routeConfigOptions = [
   {
     path: '/login-next',
     Component: () => import('@/pages/login-next'),
+    layout: false,
+  },
+  {
+    path: Routes.SsoCallback,
+    Component: () => import('@/pages/auth/sso-callback'),
     layout: false,
   },
   {

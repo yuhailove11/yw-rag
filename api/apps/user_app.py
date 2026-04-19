@@ -22,6 +22,7 @@ import secrets
 import time
 from datetime import datetime
 import base64
+from urllib.parse import urlencode
 
 from quart import make_response, redirect, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -62,6 +63,20 @@ from api.utils.web_utils import (
 from common import settings
 from common.http_client import async_request
 from api.apps.services.platform_auth_service import exchange_platform_ticket, platform_auth_enabled
+
+
+def _build_platform_auth_callback_url(auth: str | None = None, error: str | None = None) -> str:
+    # 当前 RAGFlow Docker 运行时未挂载前端源码，也不会实时重建 web/dist。
+    # 因此统一免登回跳仍走前端已经存在的首页 `/?auth=` 机制，避免新增路由在现有镜像里 404。
+    callback_url = "/"
+    query_params: dict[str, str] = {}
+    if auth:
+        query_params["auth"] = auth
+    if error:
+        query_params["error"] = error
+    if query_params:
+        return f"{callback_url}?{urlencode(query_params)}"
+    return callback_url
 
 
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
@@ -162,17 +177,13 @@ async def platform_sso_exchange():
         user = exchange_platform_ticket(ticket)
     except Exception as exc:
         logging.exception(exc)
-        return get_json_result(
-            data=False,
-            code=RetCode.AUTHENTICATION_ERROR,
-            message=f"SSO exchange failed: {str(exc)}",
-        )
+        return redirect(_build_platform_auth_callback_url(error=f"SSO exchange failed: {str(exc)}"))
 
     user.access_token = get_uuid()
     user.last_login_time = get_format_time()
     login_user(user)
     user.save()
-    return redirect(f"/?auth={user.get_id()}")
+    return redirect(_build_platform_auth_callback_url(auth=user.get_id()))
 
 
 @manager.route("/login/channels", methods=["GET"])  # noqa: F821
