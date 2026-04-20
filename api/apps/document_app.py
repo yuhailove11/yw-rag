@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from quart import make_response, request
 
 from api.apps import current_user, login_required
+from api.apps.services.document_api_service import map_doc_keys_with_run_status
 from api.common.check_team_permission import check_kb_team_permission
 from api.constants import FILE_NAME_LEN_LIMIT, IMG_BASE64_PREFIX
 from api.db import VALID_FILE_TYPES, FileType
@@ -816,12 +817,62 @@ async def parse():
     return get_json_result(data=txt)
 
 
+@manager.route("/upload", methods=["POST"])  # noqa: F821
 @manager.route("/upload_info", methods=["POST"])  # noqa: F821
 @login_required
 async def upload_info():
+    form = await request.form
     files = await request.files
     file_objs = files.getlist("file") if files and files.get("file") else []
     url = request.args.get("url")
+    kb_id = form.get("kb_id") or request.args.get("kb_id")
+
+    if kb_id:
+        if file_objs and url:
+            return get_json_result(
+                data=False,
+                message="Provide either multipart file(s) or ?url=..., not both.",
+                code=RetCode.BAD_REQUEST,
+            )
+
+        if not file_objs:
+            return get_json_result(
+                data=False,
+                message="No file part!",
+                code=RetCode.ARGUMENT_ERROR,
+            )
+
+        e, kb = KnowledgebaseService.get_by_id(kb_id)
+        if not e:
+            return get_json_result(
+                data=False,
+                message=f"Can't find the dataset with ID {kb_id}!",
+                code=RetCode.DATA_ERROR,
+            )
+
+        if not check_kb_team_permission(kb, current_user.id):
+            return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+
+        err, uploaded_files = await thread_pool_exec(
+            FileService.upload_document,
+            kb,
+            file_objs,
+            current_user.id,
+            parent_path=form.get("parent_path"),
+        )
+        if err:
+            return get_json_result(data=False, message="\n".join(err), code=RetCode.SERVER_ERROR)
+        if not uploaded_files:
+            return get_json_result(
+                data=False,
+                message="There seems to be an issue with your file format. please verify it is correct and not corrupted.",
+                code=RetCode.DATA_ERROR,
+            )
+
+        docs = [item[0] for item in uploaded_files]
+        return get_json_result(
+            data=[map_doc_keys_with_run_status(doc, run_status=TaskStatus.UNSTART.value) for doc in docs]
+        )
 
     if file_objs and url:
         return get_json_result(

@@ -48,13 +48,18 @@ class _DummyFile:
 
 
 class _DummyRequest:
-    def __init__(self, *, files=None, args=None):
+    def __init__(self, *, files=None, form=None, args=None):
         self._files = files or _DummyFiles()
+        self._form = form or {}
         self.args = args or {}
 
     @property
     def files(self):
         return _AwaitableValue(self._files)
+
+    @property
+    def form(self):
+        return _AwaitableValue(self._form)
 
 
 def _run(coro):
@@ -137,3 +142,56 @@ def test_upload_info_supports_url_single_and_multiple_files(monkeypatch):
         ("user-1", "a.txt", None),
         ("user-1", "b.txt", None),
     ]
+
+
+@pytest.mark.p2
+def test_upload_info_with_kb_id_creates_documents(monkeypatch):
+    module = _load_document_app_module(monkeypatch)
+    captured = {}
+    kb = type("KB", (), {"id": "kb-1", "tenant_id": "tenant-1", "name": "测试库"})()
+    doc = type(
+        "Doc",
+        (),
+        {
+            "id": "doc-1",
+            "name": "sample.txt",
+            "kb_id": "kb-1",
+            "parser_config": {},
+            "parser_id": "naive",
+            "pipeline_id": "",
+            "created_by": "user-1",
+            "type": "doc",
+            "location": "sample.txt",
+            "size": 10,
+            "suffix": "txt",
+            "run": "0",
+            "chunk_num": 0,
+            "token_num": 0,
+            "process_duration": 0,
+            "status": "1",
+            "source_type": "",
+            "thumbnail": "",
+            "create_time": 0,
+            "update_time": 0,
+            "create_date": "",
+            "update_date": "",
+            "nickname": "",
+        },
+    )()
+
+    async def fake_thread_pool_exec(func, *args, **kwargs):
+        captured["func"] = func
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return [], [(doc, b"blob")]
+
+    monkeypatch.setattr(module, "thread_pool_exec", fake_thread_pool_exec)
+    monkeypatch.setattr(module.KnowledgebaseService, "get_by_id", lambda kb_id: (True, kb))
+    monkeypatch.setattr(module, "check_kb_team_permission", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(module, "map_doc_keys_with_run_status", lambda d, run_status=None: {"id": d.id, "name": d.name, "kb_id": d.kb_id, "run": run_status})
+    monkeypatch.setattr(module, "request", _DummyRequest(files=_DummyFiles({"file": [_DummyFile("sample.txt")]}), form={"kb_id": "kb-1"}))
+
+    res = _run(module.upload_info())
+    assert res["code"] == 0
+    assert res["data"] == [{"id": "doc-1", "name": "sample.txt", "kb_id": "kb-1", "run": module.TaskStatus.UNSTART.value}]
+    assert captured["kwargs"]["parent_path"] is None
